@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase.config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
