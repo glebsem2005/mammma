@@ -15,8 +15,12 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CryptoService } from '../services/CryptoService';
+import { collection, addDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase.config';
 
 const ChatScreen = ({ route, navigation }) => {
   const { chatId, chatName } = route.params;
@@ -37,16 +41,18 @@ const ChatScreen = ({ route, navigation }) => {
     try {
       setShowCallOptionsModal(false);
       
-      // Получаем ID собеседника из chatId
-      const targetUserId = chatId.replace('chat_', '');
+      // Получаем информацию о собеседнике
+      const userId = await AsyncStorage.getItem('userId');
+      const targetUserId = chatId.includes('_') ? chatId.split('_')[1] : chatId;
       
-      // Переходим к экрану звонка
+      // Переходим к экрану звонка с правильными параметрами
       navigation.navigate('Call', {
         callType: callType,
         isIncoming: false,
         callData: {
           targetUserId: targetUserId,
-          callerName: chatName,
+          targetName: chatName,
+          callerId: userId,
         }
       });
     } catch (error) {
@@ -233,28 +239,9 @@ const ChatScreen = ({ route, navigation }) => {
     try {
       // Получаем информацию о текущем пользователе
       const userId = await AsyncStorage.getItem('userId');
-      const recipientPublicKey = await getRecipientPublicKey(chatId);
       
-      // Шифруем сообщение
-      const encrypted = await CryptoService.encryptMessage(messageText, recipientPublicKey);
-      
-      // Создаем объект сообщения
-      const messageData = {
-        senderId: userId,
-        encryptedMessage: encrypted.encryptedMessage,
-        nonce: encrypted.nonce,
-        timestamp: new Date(),
-        messageType: 'text',
-        chatId: chatId,
-      };
-      
-      // Сохраняем в Firebase
-      const { collection, addDoc } = await import('firebase/firestore');
-      const { db } = await import('../firebase.config');
-      
-      await addDoc(collection(db, 'messages', chatId, 'messages'), messageData);
-      
-      // Добавляем в локальный стэйт расшифрованное сообщение
+      // Для демо - добавляем сообщение локально
+      // В реальном приложении здесь будет получение публичного ключа получателя
       const newMessage = {
         id: Date.now().toString(),
         senderId: userId,
@@ -265,6 +252,11 @@ const ChatScreen = ({ route, navigation }) => {
       };
 
       setMessages(prev => [...prev, newMessage]);
+      
+      // TODO: Реальное шифрование и отправка в Firebase
+      // const recipientPublicKey = await getRecipientPublicKey(chatId);
+      // const encrypted = await CryptoService.encryptMessage(messageText, recipientPublicKey);
+      // await addDoc(collection(db, 'messages', chatId, 'messages'), encryptedData);
       
       // Прокрутка к последнему сообщению
       setTimeout(() => {
@@ -388,9 +380,6 @@ const ChatScreen = ({ route, navigation }) => {
 
   const uploadVoiceMessage = async (uri) => {
     try {
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-      const { storage } = await import('../firebase.config');
-      
       const response = await fetch(uri);
       const blob = await response.blob();
       
@@ -409,7 +398,6 @@ const ChatScreen = ({ route, navigation }) => {
 
   const getAudioDuration = async (uri) => {
     try {
-      const { Audio } = await import('expo-av');
       const { sound } = await Audio.Sound.createAsync({ uri });
       const status = await sound.getStatusAsync();
       await sound.unloadAsync();
@@ -422,8 +410,7 @@ const ChatScreen = ({ route, navigation }) => {
 
   const getFileSize = async (uri) => {
     try {
-      const { getInfoAsync } = await import('expo-file-system');
-      const info = await getInfoAsync(uri);
+      const info = await FileSystem.getInfoAsync(uri);
       return info.size || 0;
     } catch (error) {
       console.error('Error getting file size:', error);
@@ -433,7 +420,6 @@ const ChatScreen = ({ route, navigation }) => {
 
   const playVoiceMessage = async (audioUri) => {
     try {
-      const { Audio } = await import('expo-av');
       const { sound } = await Audio.Sound.createAsync({ uri: audioUri });
       await sound.playAsync();
       
@@ -538,9 +524,6 @@ const ChatScreen = ({ route, navigation }) => {
 
   const uploadImage = async (uri) => {
     try {
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-      const { storage } = await import('../firebase.config');
-      
       const response = await fetch(uri);
       const blob = await response.blob();
       
