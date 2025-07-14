@@ -16,7 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const CallScreen = ({ route, navigation }) => {
-  const { callType, isIncoming, callData } = route.params;
+  const { callType, isIncoming = false, callData = {} } = route.params || {};
+  
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [callStatus, setCallStatus] = useState(isIncoming ? 'incoming' : 'connecting');
@@ -48,49 +49,56 @@ const CallScreen = ({ route, navigation }) => {
 
   const initializeCall = async () => {
     try {
-      // Инициализируем WebRTC сервис
-      const userId = await AsyncStorage.getItem('userId');
-      const token = await AsyncStorage.getItem('userToken');
+      console.log('🚀 Инициализируем звонок...');
       
-      await WebRTCService.initialize('ws://localhost:3001', userId, token);
+      // Получаем ID пользователя
+      const userId = await AsyncStorage.getItem('userId');
+      if (!userId) {
+        throw new Error('Пользователь не авторизован');
+      }
+      
+      // Инициализируем WebRTC сервис
+      await WebRTCService.initialize('ws://localhost:3001', userId);
       
       // Настраиваем коллбэки
       WebRTCService.onLocalStream = (stream) => {
+        console.log('📹 Получен локальный поток');
         setLocalStream(stream);
       };
       
       WebRTCService.onRemoteStream = (stream) => {
+        console.log('📺 Получен удаленный поток');
         setRemoteStream(stream);
         setCallStatus('connected');
         startCallTimer();
       };
       
-      WebRTCService.onCallEnded = () => {
+      WebRTCService.onCallEnded = (data) => {
+        console.log('📴 Звонок завершен:', data);
         endCall();
       };
       
-      WebRTCService.onIncomingCall = (data) => {
-        setCallStatus('incoming');
-      };
-      
-      WebRTCService.onCallAccepted = () => {
+      WebRTCService.onCallAccepted = (data) => {
+        console.log('✅ Звонок принят:', data);
         setCallStatus('connected');
         startCallTimer();
       };
       
-      WebRTCService.onCallDeclined = () => {
+      WebRTCService.onCallDeclined = (data) => {
+        console.log('❌ Звонок отклонен:', data);
         Alert.alert('Звонок отклонен', 'Пользователь отклонил звонок');
         navigation.goBack();
       };
       
       WebRTCService.onError = (error) => {
-        Alert.alert('Ошибка звонка', error.error);
+        console.error('❌ Ошибка звонка:', error);
+        Alert.alert('Ошибка звонка', error.error || 'Произошла ошибка');
         navigation.goBack();
       };
       
-      WebRTCService.onMediaStateChange = (data) => {
-        // Обрабатываем изменения медиа состояния собеседника
-        console.log('Media state changed:', data);
+      WebRTCService.onCallInitiated = (data) => {
+        console.log('📞 Звонок инициирован:', data);
+        setCallStatus('calling');
       };
       
       if (isIncoming) {
@@ -98,12 +106,16 @@ const CallScreen = ({ route, navigation }) => {
         setCallStatus('incoming');
       } else {
         // Исходящий звонок - инициируем
-        await WebRTCService.initiateCall(callData.targetUserId, callType);
+        if (callData.targetUserId) {
+          await WebRTCService.initiateCall(callData.targetUserId, callType);
+        } else {
+          throw new Error('Не указан ID получателя');
+        }
       }
       
     } catch (error) {
-      console.error('Error initializing call:', error);
-      Alert.alert('Ошибка', 'Не удалось инициализировать звонок');
+      console.error('❌ Ошибка инициализации звонка:', error);
+      Alert.alert('Ошибка', 'Не удалось инициализировать звонок: ' + error.message);
       navigation.goBack();
     }
   };
@@ -118,21 +130,33 @@ const CallScreen = ({ route, navigation }) => {
 
   const acceptCall = async () => {
     try {
-      await WebRTCService.acceptCall(callData.roomId);
-      setCallStatus('connecting');
+      console.log('✅ Принимаем звонок...');
+      
+      if (callData.roomId) {
+        await WebRTCService.acceptCall(callData.roomId);
+        setCallStatus('connecting');
+      } else {
+        throw new Error('Не указан ID комнаты');
+      }
     } catch (error) {
-      console.error('Error accepting call:', error);
+      console.error('❌ Ошибка принятия звонка:', error);
       Alert.alert('Ошибка', 'Не удалось принять звонок');
       navigation.goBack();
     }
   };
 
   const declineCall = () => {
-    WebRTCService.declineCall(callData.roomId);
+    console.log('❌ Отклоняем звонок');
+    
+    if (callData.roomId) {
+      WebRTCService.declineCall(callData.roomId);
+    }
     navigation.goBack();
   };
 
   const endCall = () => {
+    console.log('📴 Завершаем звонок');
+    
     WebRTCService.endCall();
     cleanup();
     navigation.goBack();
@@ -141,6 +165,7 @@ const CallScreen = ({ route, navigation }) => {
   const cleanup = () => {
     if (callTimer.current) {
       clearInterval(callTimer.current);
+      callTimer.current = null;
     }
     WebRTCService.cleanup();
   };
@@ -161,13 +186,23 @@ const CallScreen = ({ route, navigation }) => {
 
   const toggleSpeaker = () => {
     setIsSpeaker(!isSpeaker);
-    // Здесь нужно добавить логику переключения динамика
+    // TODO: Реализовать переключение динамика
   };
 
   const formatCallDuration = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const getStatusText = () => {
+    switch (callStatus) {
+      case 'incoming': return 'Входящий звонок';
+      case 'calling': return 'Вызов...';
+      case 'connecting': return 'Подключение...';
+      case 'connected': return formatCallDuration(callDuration);
+      default: return 'Звонок';
+    }
   };
 
   const renderIncomingCall = () => (
@@ -178,7 +213,9 @@ const CallScreen = ({ route, navigation }) => {
             {callData.callerName?.charAt(0).toUpperCase() || '?'}
           </Text>
         </View>
-        <Text style={styles.callerName}>{callData.callerName || 'Неизвестный'}</Text>
+        <Text style={styles.callerName}>
+          {callData.callerName || 'Неизвестный контакт'}
+        </Text>
         <Text style={styles.callTypeText}>
           {callType === 'video' ? 'Видеозвонок' : 'Аудиозвонок'}
         </Text>
@@ -186,10 +223,10 @@ const CallScreen = ({ route, navigation }) => {
       
       <View style={styles.incomingCallActions}>
         <TouchableOpacity style={styles.declineButton} onPress={declineCall}>
-          <Text style={styles.callButtonText}>📞</Text>
+          <Text style={styles.callButtonIcon}>📞</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.acceptButton} onPress={acceptCall}>
-          <Text style={styles.callButtonText}>📞</Text>
+          <Text style={styles.callButtonIcon}>📞</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -215,19 +252,26 @@ const CallScreen = ({ route, navigation }) => {
               mirror={true}
             />
           )}
+          
+          <View style={styles.videoCallInfo}>
+            <Text style={styles.videoCallName}>
+              {callData.callerName || callData.targetName || 'Контакт'}
+            </Text>
+            <Text style={styles.videoCallStatus}>{getStatusText()}</Text>
+          </View>
         </View>
       ) : (
         <View style={styles.audioCallContainer}>
           <View style={styles.callerInfo}>
             <View style={styles.callerAvatar}>
               <Text style={styles.callerAvatarText}>
-                {callData.callerName?.charAt(0).toUpperCase() || '?'}
+                {(callData.callerName || callData.targetName || '?').charAt(0).toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.callerName}>{callData.callerName || 'Неизвестный'}</Text>
-            <Text style={styles.callStatus}>
-              {callStatus === 'connected' ? formatCallDuration(callDuration) : 'Подключение...'}
+            <Text style={styles.callerName}>
+              {callData.callerName || callData.targetName || 'Контакт'}
             </Text>
+            <Text style={styles.callStatus}>{getStatusText()}</Text>
           </View>
         </View>
       )}
@@ -314,6 +358,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     fontFamily: 'System',
+    textAlign: 'center',
   },
   callTypeText: {
     fontSize: 16,
@@ -340,8 +385,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#dc2626',
     justifyContent: 'center',
     alignItems: 'center',
+    transform: [{ rotate: '135deg' }],
   },
-  callButtonText: {
+  callButtonIcon: {
     fontSize: 28,
     color: '#ffffff',
   },
@@ -366,6 +412,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#333333',
     borderRadius: 8,
     zIndex: 1,
+  },
+  videoCallInfo: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    zIndex: 1,
+  },
+  videoCallName: {
+    fontSize: 18,
+    color: '#ffffff',
+    fontWeight: '600',
+    fontFamily: 'System',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  videoCallStatus: {
+    fontSize: 14,
+    color: '#cccccc',
+    fontFamily: 'System',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   audioCallContainer: {
     flex: 1,
