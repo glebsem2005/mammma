@@ -11,6 +11,7 @@ import AuthScreen from './screens/AuthScreen';
 import ProfileSetupScreen from './screens/ProfileSetupScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatScreen from './screens/ChatScreen';
+import CallScreen from './screens/CallScreen';
 import FeedScreen from './screens/FeedScreen';
 import MatchingScreen from './screens/MatchingScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -24,6 +25,7 @@ const ChatStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="ChatList" component={ChatListScreen} />
     <Stack.Screen name="Chat" component={ChatScreen} />
+    <Stack.Screen name="Call" component={CallScreen} />
   </Stack.Navigator>
 );
 
