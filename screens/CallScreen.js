@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const CallScreen = ({ route, navigation }) => {
-  const { callType, isIncoming = false, callData = {} } = route.params || {};
+  const { callType = 'audio', isIncoming = false, callData = {} } = route.params || {};
   
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -30,6 +30,7 @@ const CallScreen = ({ route, navigation }) => {
   const callStartTime = useRef(null);
 
   useEffect(() => {
+    console.log('📞 CallScreen запущен с параметрами:', { callType, isIncoming, callData });
     initializeCall();
     setupBackHandler();
     
@@ -214,7 +215,7 @@ const CallScreen = ({ route, navigation }) => {
           </Text>
         </View>
         <Text style={styles.callerName}>
-          {callData.callerName || 'Неизвестный контакт'}
+          {callData.targetName || callData.callerName || 'Неизвестный контакт'}
         </Text>
         <Text style={styles.callTypeText}>
           {callType === 'video' ? 'Видеозвонок' : 'Аудиозвонок'}
@@ -255,7 +256,7 @@ const CallScreen = ({ route, navigation }) => {
           
           <View style={styles.videoCallInfo}>
             <Text style={styles.videoCallName}>
-              {callData.callerName || callData.targetName || 'Контакт'}
+              {callData.targetName || callData.callerName || 'Контакт'}
             </Text>
             <Text style={styles.videoCallStatus}>{getStatusText()}</Text>
           </View>
@@ -269,7 +270,7 @@ const CallScreen = ({ route, navigation }) => {
               </Text>
             </View>
             <Text style={styles.callerName}>
-              {callData.callerName || callData.targetName || 'Контакт'}
+              {callData.targetName || callData.callerName || 'Контакт'}
             </Text>
             <Text style={styles.callStatus}>{getStatusText()}</Text>
           </View>
