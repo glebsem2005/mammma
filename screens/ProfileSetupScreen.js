@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase.config';
-import { CryptoService } from '../services/CryptoService';
+import CryptoService from '../services/CryptoService';
 
 const INTERESTS = [
   'Спорт', 'Музыка', 'Кино', 'Путешествия', 'Искусство',
