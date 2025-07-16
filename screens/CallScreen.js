@@ -102,30 +102,17 @@ const CallScreen = ({ route, navigation }) => {
         setCallStatus('calling');
       };
       
-  const initiateCall = async (callType) => {
-    try {
-      setShowCallOptionsModal(false);
-      
-      // Получаем информацию о собеседнике
-      const userId = await AsyncStorage.getItem('userId');
-      const targetUserId = chatId.includes('_') ? chatId.split('_')[1] : chatId;
-      
-      // Переходим к экрану звонка с ПРАВИЛЬНЫМИ параметрами
-      navigation.navigate('Call', {
-        callType: callType,
-        isIncoming: false,
-        callData: {
-          targetUserId: targetUserId,
-          targetName: chatName,
-          callerId: userId,
-          roomId: null, // Будет создан сервером
+      if (isIncoming) {
+        // Входящий звонок - ждем решения пользователя
+        setCallStatus('incoming');
+      } else {
+        // Исходящий звонок - инициируем
+        if (callData.targetUserId) {
+          await WebRTCService.initiateCall(callData.targetUserId, callType);
+        } else {
+          throw new Error('Не указан ID получателя');
         }
-      });
-    } catch (error) {
-      console.error('Error initiating call:', error);
-      Alert.alert('Ошибка', 'Не удалось инициировать звонок');
-    }
-  };
+      }
       
     } catch (error) {
       console.error('❌ Ошибка инициализации звонка:', error);
