@@ -45,7 +45,7 @@ const ChatScreen = ({ route, navigation }) => {
       const userId = await AsyncStorage.getItem('userId');
       const targetUserId = chatId.includes('_') ? chatId.split('_')[1] : chatId;
       
-      // Переходим к экрану звонка с правильными параметрами
+      // Переходим к экрану звонка с ПРАВИЛЬНЫМИ параметрами
       navigation.navigate('Call', {
         callType: callType,
         isIncoming: false,
@@ -53,6 +53,7 @@ const ChatScreen = ({ route, navigation }) => {
           targetUserId: targetUserId,
           targetName: chatName,
           callerId: userId,
+          roomId: null, // Будет создан WebRTC сервером
         }
       });
     } catch (error) {
