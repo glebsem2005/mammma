@@ -1,5 +1,235 @@
-
 import nacl from 'tweetnacl';
+import { encode, decode } from 'tweetnacl-util';
+import * as SecureStore from 'expo-secure-store';
+
+class CryptoService {
+  
+  /**
+   * Генерация пары ключей для E2E шифрования
+   */
+  static async generateKeyPair() {
+    try {
+      console.log('🔑 Генерируем новую пару ключей...');
+      
+      const keyPair = nacl.box.keyPair();
+      const publicKey = encode(keyPair.publicKey);
+      const secretKey = encode(keyPair.secretKey);
+      
+      // Сохраняем приватный ключ сразу
+      await SecureStore.setItemAsync('userPrivateKey', secretKey);
+      
+      console.log('✅ Ключи сгенерированы и сохранены');
+      
+      return { publicKey, secretKey };
+    } catch (error) {
+      console.error('❌ Ошибка генерации ключей:', error);
+      throw new Error('Не удалось сгенерировать ключи');
+    }
+  }
+
+  /**
+   * Получение приватного ключа
+   */
+  static async getPrivateKey() {
+    try {
+      const privateKey = await SecureStore.getItemAsync('userPrivateKey');
+      if (!privateKey) {
+        throw new Error('Приватный ключ не найден');
+      }
+      return privateKey;
+    } catch (error) {
+      console.error('❌ Ошибка получения ключа:', error);
+      throw new Error('Не удалось получить приватный ключ');
+    }
+  }
+
+  /**
+   * Шифрование сообщения
+   */
+  static async encryptMessage(message, recipientPublicKey) {
+    try {
+      console.log('🔐 Шифруем сообщение...');
+      
+      const ourPrivateKey = await this.getPrivateKey();
+      const messageBytes = new TextEncoder().encode(message);
+      const nonce = nacl.randomBytes(nacl.box.nonceLength);
+      const recipientKeyBytes = decode(recipientPublicKey);
+      const ourKeyBytes = decode(ourPrivateKey);
+      
+      const encrypted = nacl.box(messageBytes, nonce, recipientKeyBytes, ourKeyBytes);
+      
+      if (!encrypted) {
+        throw new Error('Шифрование не удалось');
+      }
+      
+      const result = {
+        encrypted: encode(encrypted),
+        nonce: encode(nonce)
+      };
+      
+      console.log('✅ Сообщение зашифровано');
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Ошибка шифрования:', error);
+      throw new Error('Не удалось зашифровать: ' + error.message);
+    }
+  }
+
+  /**
+   * Расшифровка сообщения
+   */
+  static async decryptMessage(encryptedMessage, nonce, senderPublicKey) {
+    try {
+      console.log('🔓 Расшифровываем сообщение...');
+      
+      const ourPrivateKey = await this.getPrivateKey();
+      const encryptedBytes = decode(encryptedMessage);
+      const nonceBytes = decode(nonce);
+      const senderKeyBytes = decode(senderPublicKey);
+      const ourKeyBytes = decode(ourPrivateKey);
+      
+      const decrypted = nacl.box.open(encryptedBytes, nonceBytes, senderKeyBytes, ourKeyBytes);
+      
+      if (!decrypted) {
+        throw new Error('Расшифровка не удалась');
+      }
+      
+      const message = new TextDecoder().decode(decrypted);
+      console.log('✅ Сообщение расшифровано');
+      
+      return message;
+      
+    } catch (error) {
+      console.error('❌ Ошибка расшифровки:', error);
+      throw new Error('Не удалось расшифровать: ' + error.message);
+    }
+  }
+
+  /**
+   * Хеширование пароля
+   */
+  static async hashPassword(password) {
+    try {
+      const passwordBytes = new TextEncoder().encode(password);
+      const hash = nacl.hash(passwordBytes);
+      return encode(hash);
+    } catch (error) {
+      console.error('❌ Ошибка хеширования:', error);
+      throw new Error('Не удалось захешировать пароль');
+    }
+  }
+
+  /**
+   * Шифрование локальных данных паролем
+   */
+  static async encryptLocalData(data, password) {
+    try {
+      const passwordHash = await this.hashPassword(password);
+      const key = decode(passwordHash).slice(0, 32);
+      const dataString = JSON.stringify(data);
+      const dataBytes = new TextEncoder().encode(dataString);
+      const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+      
+      const encrypted = nacl.secretbox(dataBytes, nonce, key);
+      
+      if (!encrypted) {
+        throw new Error('Шифрование данных не удалось');
+      }
+      
+      return {
+        encrypted: encode(encrypted),
+        nonce: encode(nonce)
+      };
+      
+    } catch (error) {
+      console.error('❌ Ошибка шифрования данных:', error);
+      throw new Error('Не удалось зашифровать данные');
+    }
+  }
+
+  /**
+   * Расшифровка локальных данных
+   */
+  static async decryptLocalData(encryptedData, nonce, password) {
+    try {
+      const passwordHash = await this.hashPassword(password);
+      const key = decode(passwordHash).slice(0, 32);
+      const encryptedBytes = decode(encryptedData);
+      const nonceBytes = decode(nonce);
+      
+      const decrypted = nacl.secretbox.open(encryptedBytes, nonceBytes, key);
+      
+      if (!decrypted) {
+        throw new Error('Неверный пароль');
+      }
+      
+      const dataString = new TextDecoder().decode(decrypted);
+      return JSON.parse(dataString);
+      
+    } catch (error) {
+      console.error('❌ Ошибка расшифровки данных:', error);
+      throw new Error('Не удалось расшифровать данные');
+    }
+  }
+
+  /**
+   * Очистка ключей
+   */
+  static async clearKeys() {
+    try {
+      await SecureStore.deleteItemAsync('userPrivateKey');
+      console.log('✅ Ключи очищены');
+    } catch (error) {
+      console.error('❌ Ошибка очистки:', error);
+    }
+  }
+
+  /**
+   * Проверка наличия ключей
+   */
+  static async hasKeys() {
+    try {
+      const privateKey = await SecureStore.getItemAsync('userPrivateKey');
+      return !!privateKey;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Тест шифрования
+   */
+  static async testEncryption() {
+    try {
+      console.log('🧪 Тестируем шифрование...');
+      
+      // Генерируем ключи для Alice и Bob
+      const alice = await this.generateKeyPair();
+      const bob = await this.generateKeyPair();
+      
+      // Alice отправляет сообщение Bob
+      await SecureStore.setItemAsync('userPrivateKey', alice.secretKey);
+      const originalMessage = 'Привет, Bob! Это секретное сообщение.';
+      const encrypted = await this.encryptMessage(originalMessage, bob.publicKey);
+      
+      // Bob получает сообщение
+      await SecureStore.setItemAsync('userPrivateKey', bob.secretKey);
+      const decrypted = await this.decryptMessage(encrypted.encrypted, encrypted.nonce, alice.publicKey);
+      
+      const success = originalMessage === decrypted;
+      console.log(success ? '✅ ТЕСТ ПРОЙДЕН' : '❌ ТЕСТ ПРОВАЛЕН');
+      
+      return success;
+      
+    } catch (error) {
+      console.error('❌ Ошибка теста:', error);
+      return false;
+    }
+  }
+}
+
+export default CryptoService;import nacl from 'tweetnacl';
 import { encode, decode } from 'tweetnacl-util';
 import * as SecureStore from 'expo-secure-store';
 
